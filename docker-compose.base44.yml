@@ -1,0 +1,48 @@
+# Base44 sandbox environment for OpportunityHub (Expo / React Native starter).
+#
+# The app is a React Native (Expo SDK 54) prototype. There is no browser build in
+# the repo, so we run Expo's Metro dev server for the *web* target, which serves
+# the app on host port 3000 (the preview entry point).
+#
+# The service runs from the bind-mounted source with a plain `node:22` image: no
+# app code is baked into an image, so edits are picked up by Metro.
+services:
+  web:
+    image: node:22
+    working_dir: /app
+    # Install from the lockfile, then start the live-reloading web dev server.
+    command:
+      [
+        "sh",
+        "-ec",
+        "npm install --no-audit --no-fund && exec npx expo start --web --host lan --port 3000",
+      ]
+    ports:
+      - "3000:3000"
+    environment:
+      # Expo/Metro: no telemetry, don't try to open a browser. Note: do NOT set
+      # CI=1 — Expo then starts Metro with "reloads are disabled", losing live
+      # reload. Running without a TTY already suppresses interactive prompts.
+      - EXPO_NO_TELEMETRY=1
+      - BROWSER=none
+      # Bind mounts on the sandbox don't always deliver inotify events, so poll.
+      - CHOKIDAR_USEPOLLING=1
+      # Set by the platform for sandbox previews (absent/other value = normal behaviour).
+      - BASE44_PREVIEW_MODE
+    volumes:
+      # Live source (edits are reflected by Metro's watcher).
+      - .:/app
+      # Keep node_modules in a volume so the sandbox repo stays clean.
+      - web_node_modules:/app/node_modules
+    healthcheck:
+      # Probes the dev server itself; the first compile happens on the first
+      # browser request, so allow a generous startup grace period.
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://127.0.0.1:3000/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    restart: on-failure
+
+volumes:
+  web_node_modules:

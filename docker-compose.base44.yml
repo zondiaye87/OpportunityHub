@@ -1,0 +1,42 @@
+# Base44 sandbox runbook.
+#
+# The repo is an Expo (React Native) app with no server of its own, so the
+# sandbox runs Expo's web dev server (Metro), which serves the app to the
+# browser preview and live-reloads on edits.
+#
+#   docker compose -f docker-compose.base44.yml up -d --build
+#
+# Preview entry point: host port 3000 -> Metro web dev server on container 3000.
+services:
+  web:
+    image: node:22
+    working_dir: /app
+    restart: on-failure
+    environment:
+      # Platform-supplied preview flag; unset preserves normal Expo behaviour.
+      - BASE44_PREVIEW_MODE
+      # CI must stay unset: Expo/Metro switches to CI mode when CI is set,
+      # which disables the file watcher and therefore live reload.
+      - EXPO_NO_TELEMETRY=1
+    ports:
+      - "3000:3000"
+    volumes:
+      # Live source, so edits in the sandbox are picked up by Metro without a rebuild.
+      - ./:/app
+      # Dependencies installed into a volume on startup (see command below).
+      - node_modules:/app/node_modules
+    command:
+      - sh
+      - -ec
+      - npm install --no-audit --no-fund --no-progress && exec npx expo start --web --port 3000
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - node -e "fetch('http://127.0.0.1:3000/').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 90s
+
+volumes:
+  node_modules:
